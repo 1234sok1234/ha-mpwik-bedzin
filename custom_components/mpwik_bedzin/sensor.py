@@ -5,7 +5,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_USERNAME
+from homeassistant.const import CONF_USERNAME, UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -27,6 +27,7 @@ async def async_setup_entry(
         MpwikAmountDueSensor(coordinator, entry.entry_id, username),
         MpwikNextDueDateSensor(coordinator, entry.entry_id, username),
         MpwikUnpaidCountSensor(coordinator, entry.entry_id, username),
+        MpwikWaterMeterSensor(coordinator, entry.entry_id, username),
     ])
 
 
@@ -44,9 +45,8 @@ class MpwikBaseSensor(CoordinatorEntity[MpwikCoordinator], SensorEntity):
             "model": "iBOK",
         }
 
-
 class MpwikAmountDueSensor(MpwikBaseSensor):
-    """Łączna kwota do zapłaty (PLN)."""
+    """Łączna kwota do zapłaty (PLN) + pełna historia faktur w atrybutach."""
 
     _attr_name = "Amount due"
     _attr_native_unit_of_measurement = "PLN"
@@ -68,6 +68,7 @@ class MpwikAmountDueSensor(MpwikBaseSensor):
             "total_charged": self.coordinator.data.get("total_charged"),
             "total_paid": self.coordinator.data.get("total_paid"),
             "unpaid_invoices": self.coordinator.data.get("unpaid_invoices", []),
+            "invoices": self.coordinator.data.get("invoices", []),
         }
 
 
@@ -99,3 +100,32 @@ class MpwikUnpaidCountSensor(MpwikBaseSensor):
     @property
     def native_value(self) -> int | None:
         return self.coordinator.data.get("unpaid_count")
+
+
+class MpwikWaterMeterSensor(MpwikBaseSensor):
+    """Stan wodomierza (m³) zgodny z Energy Dashboard."""
+
+    _attr_name = "Water meter"
+    _attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
+    _attr_device_class = SensorDeviceClass.WATER
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:water"
+
+    def __init__(self, coordinator: MpwikCoordinator, entry_id: str, username: str) -> None:
+        super().__init__(coordinator, entry_id, username)
+        self._attr_unique_id = f"{entry_id}_water_meter"
+
+    @property
+    def native_value(self) -> float | None:
+        return self.coordinator.data.get("water_meter_m3")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        info = self.coordinator.data.get("water_meter_info") or {}
+        return {
+            "serial_number": info.get("serial_number"),
+            "last_reading_date": info.get("date"),
+            "last_consumption_m3": info.get("consumption_m3"),
+            "last_reading_type": info.get("type"),
+            "history": self.coordinator.data.get("water_readouts", []),
+        }
