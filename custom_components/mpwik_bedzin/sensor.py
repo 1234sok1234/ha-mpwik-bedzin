@@ -28,6 +28,7 @@ async def async_setup_entry(
         MpwikNextDueDateSensor(coordinator, entry.entry_id, username),
         MpwikUnpaidCountSensor(coordinator, entry.entry_id, username),
         MpwikWaterMeterSensor(coordinator, entry.entry_id, username),
+        MpwikWaterConsumptionSensor(coordinator, entry.entry_id, username),
     ])
 
 
@@ -46,7 +47,7 @@ class MpwikBaseSensor(CoordinatorEntity[MpwikCoordinator], SensorEntity):
         }
 
 class MpwikAmountDueSensor(MpwikBaseSensor):
-    """Łączna kwota do zapłaty (PLN) + pełna historia faktur w atrybutach."""
+    """Łączna kwota do zapłaty (PLN) + historia faktur w atrybutach."""
 
     _attr_name = "Amount due"
     _attr_native_unit_of_measurement = "PLN"
@@ -129,3 +130,21 @@ class MpwikWaterMeterSensor(MpwikBaseSensor):
             "last_reading_type": info.get("type"),
             "history": self.coordinator.data.get("water_readouts", []),
         }
+
+
+class MpwikWaterConsumptionSensor(MpwikBaseSensor):
+    """Zużycie wody (m³) wyliczone z różnicy dwóch ostatnich odczytów."""
+
+    _attr_name = "Water consumption"
+    _attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
+    _attr_device_class = SensorDeviceClass.WATER
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_icon = "mdi:water-minus"
+
+    def __init__(self, coordinator: MpwikCoordinator, entry_id: str, username: str) -> None:
+        super().__init__(coordinator, entry_id, username)
+        self._attr_unique_id = f"{entry_id}_water_consumption"
+
+    @property
+    def native_value(self) -> float | None:
+        return self.coordinator.data.get("water_consumption_m3")

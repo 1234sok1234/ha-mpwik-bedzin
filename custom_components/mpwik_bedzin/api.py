@@ -120,7 +120,6 @@ class MpwikClient:
             amount_total = round(_parse_num(item.get("wn")), 2)
             amount_paid = round(_parse_num(item.get("ma")), 2)
             item_due = round(_parse_num(item.get("ro")), 2) if "ro" in item else round(amount_total - amount_paid, 2)
-
             inv = {
                 "number": item.get("nr"),
                 "issued": item.get("dw"),
@@ -135,7 +134,12 @@ class MpwikClient:
 
         unpaid_invoices.sort(key=lambda x: x.get("due_date") or "9999-99-99")
         readouts = self._extract_readouts(raw_readouts)
-        latest_readout = readouts[0] if readouts else {}
+        latest = readouts[0] if readouts else {}
+        consumption = (
+            round(readouts[0]["reading_m3"] - readouts["reading_m3"], 3)
+            if len(readouts) >= 2
+            else latest.get("consumption_m3", 0.0)
+        )
 
         return {
             "total_due": round(_parse_num(raw_acc.get("roznica")), 2),
@@ -145,26 +149,27 @@ class MpwikClient:
             "next_due_date": unpaid_invoices[0]["due_date"] if unpaid_invoices else None,
             "unpaid_invoices": unpaid_invoices,
             "invoices": all_invoices,
-            "water_meter_m3": latest_readout.get("reading_m3"),
-            "water_meter_info": latest_readout,
-            "water_readouts": readouts[:12],
+            "water_meter_m3": latest.get("reading_m3"),
+            "water_consumption_m3": consumption,
+            "water_meter_info": latest,
+            "water_readouts": readouts[:24],
         }
 
     def _extract_readouts(self, raw_readouts: Any) -> list[dict[str, Any]]:
-        """Wyciąga i sortuje odczyty wodomierza niezależnie od struktury opakowania JSON."""
+        """Wyciąga i sortuje odczyty wodomierza z listy liczników."""
         items: list[dict[str, Any]] = []
-        if isinstance(raw_readouts, list):
-            items = raw_readouts
+        serial_default = None
+
+        if isinstance(raw_readouts, list) and raw_readouts:
+            first = raw_readouts[0]
+            if isinstance(first, dict) and isinstance(first.get("odczyty"), list):
+                serial_default = first.get("numer_fabryczny") or first.get("nr_fabryczny")
+                items = first["odczyty"]
+            else:
+                items = raw_readouts
         elif isinstance(raw_readouts, dict):
-            for key in ("pozycje", "odczyty", "readouts", "dane", "data"):
-                if isinstance(raw_readouts.get(key), list):
-                    items = raw_readouts[key]
-                    break
-            if not items:
-                for val in raw_readouts.values():
-                    if isinstance(val, list):
-                        items = val
-                        break
+            serial_default = raw_readouts.get("numer_fabryczny")
+            items = raw_readouts.get("odczyty") or raw_readouts.get("pozycje") or []
 
         parsed: list[dict[str, Any]] = []
         for r in items:
@@ -175,7 +180,7 @@ class MpwikClient:
                 "reading_m3": _parse_num(r.get("sl")),
                 "consumption_m3": _parse_num(r.get("zu")),
                 "type": r.get("typ"),
-                "serial_number": r.get("numer_fabryczny") or r.get("nr_fabryczny"),
+                "serial_number": r.get("numer_fabryczny") or serial_default,
             })
         parsed.sort(key=lambda x: str(x.get("date") or ""), reverse=True)
         return parsed
