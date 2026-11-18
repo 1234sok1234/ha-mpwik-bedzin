@@ -88,7 +88,6 @@ class MpwikClient:
             ) as resp:
                 if resp.status != 200:
                     raise MpwikApiError(f"Błąd pobierania rozrachunków: HTTP {resp.status}")
-
                 try:
                     raw = await resp.json(content_type=None)
                 except Exception as err:
@@ -99,7 +98,6 @@ class MpwikClient:
 
             return self._normalize_data(raw)
         finally:
-            # Zawsze zamykamy sesję po pobraniu danych, aby nie blokować kolejnych logowań
             try:
                 async with self._session.get(
                     f"{BASE_URL}?logout=1",
@@ -118,11 +116,7 @@ class MpwikClient:
 
         unpaid_invoices: list[dict[str, Any]] = []
         for item in raw.get("pozycje", []):
-            if "ro" in item:
-                item_due = _parse_pln(item.get("ro"))
-            else:
-                item_due = round(_parse_pln(item.get("wn")) - _parse_pln(item.get("ma")), 2)
-
+            item_due = _parse_pln(item.get("ro")) if "ro" in item else round(_parse_pln(item.get("wn")) - _parse_pln(item.get("ma")), 2)
             if item_due > 0:
                 unpaid_invoices.append({
                     "number": item.get("nr"),
