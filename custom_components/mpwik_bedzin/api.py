@@ -51,52 +51,64 @@ class MpwikClient:
         self._password = password
 
     async def async_get_accountancy(self) -> dict[str, Any]:
-        """Loguje się do iBOK i pobiera dane z modułu Accountancy_v3."""
-        async with self._session.get(
-            BASE_URL,
-            headers=DEFAULT_HEADERS,
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status != 200:
-                raise MpwikApiError(f"Błąd otwarcia strony logowania: HTTP {resp.status}")
+        """Loguje się do iBOK, pobiera dane z Accountancy_v3 i wylogowuje sesję."""
+        try:
+            async with self._session.get(
+                BASE_URL,
+                headers=DEFAULT_HEADERS,
+                timeout=aiohttp.ClientTimeout(total=20),
+            ) as resp:
+                if resp.status != 200:
+                    raise MpwikApiError(f"Błąd otwarcia strony logowania: HTTP {resp.status}")
 
-        payload = {
-            "JSTest": "ok",
-            "user": self._username,
-            "pass": self._password,
-            "login": "Zaloguj",
-        }
-        async with self._session.post(
-            BASE_URL,
-            data=payload,
-            headers=DEFAULT_HEADERS,
-            timeout=aiohttp.ClientTimeout(total=20),
-            allow_redirects=True,
-        ) as resp:
-            if resp.status not in (200, 302):
-                raise MpwikApiError(f"Błąd podczas logowania: HTTP {resp.status}")
+            payload = {
+                "JSTest": "ok",
+                "user": self._username,
+                "pass": self._password,
+                "login": "Zaloguj",
+            }
+            async with self._session.post(
+                BASE_URL,
+                data=payload,
+                headers=DEFAULT_HEADERS,
+                timeout=aiohttp.ClientTimeout(total=20),
+                allow_redirects=True,
+            ) as resp:
+                if resp.status not in (200, 302):
+                    raise MpwikApiError(f"Błąd podczas logowania: HTTP {resp.status}")
 
-        ts = int(time.time() * 1000)
-        url = f"{BASE_URL}?module=Accountancy_v3&_t={ts}"
-        xhr_headers = {**DEFAULT_HEADERS, "X-Requested-With": "XMLHttpRequest"}
+            ts = int(time.time() * 1000)
+            url = f"{BASE_URL}?module=Accountancy_v3&_t={ts}"
+            xhr_headers = {**DEFAULT_HEADERS, "X-Requested-With": "XMLHttpRequest"}
 
-        async with self._session.get(
-            url,
-            headers=xhr_headers,
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status != 200:
-                raise MpwikApiError(f"Błąd pobierania rozrachunków: HTTP {resp.status}")
+            async with self._session.get(
+                url,
+                headers=xhr_headers,
+                timeout=aiohttp.ClientTimeout(total=20),
+            ) as resp:
+                if resp.status != 200:
+                    raise MpwikApiError(f"Błąd pobierania rozrachunków: HTTP {resp.status}")
 
+                try:
+                    raw = await resp.json(content_type=None)
+                except Exception as err:
+                    raise MpwikAuthError("Nie udało się zalogować (sprawdź login, hasło lub CAPTCHA)") from err
+
+            if not isinstance(raw, dict) or "pozycje" not in raw:
+                raise MpwikAuthError("Brak danych rozrachunków — nieprawidłowe logowanie")
+
+            return self._normalize_data(raw)
+        finally:
+            # Zawsze zamykamy sesję po pobraniu danych, aby nie blokować kolejnych logowań
             try:
-                raw = await resp.json(content_type=None)
-            except Exception as err:
-                raise MpwikAuthError("Nie udało się zalogować (sprawdź login i hasło)") from err
-
-        if not isinstance(raw, dict) or "pozycje" not in raw:
-            raise MpwikAuthError("Brak danych rozrachunków — nieprawidłowe logowanie")
-
-        return self._normalize_data(raw)
+                async with self._session.get(
+                    f"{BASE_URL}?logout=1",
+                    headers=DEFAULT_HEADERS,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ):
+                    pass
+            except Exception:
+                pass
 
     def _normalize_data(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Przetwarza surowy JSON na czytelne dane dla sensorów HA."""
