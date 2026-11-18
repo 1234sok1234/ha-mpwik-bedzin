@@ -100,7 +100,7 @@ class MpwikClient:
         finally:
             try:
                 async with self._session.get(
-                    f"{BASE_URL}?logout=1",
+                    f"{BASE_URL}?logout=true&kill=true",
                     headers=DEFAULT_HEADERS,
                     timeout=aiohttp.ClientTimeout(total=10),
                 ):
