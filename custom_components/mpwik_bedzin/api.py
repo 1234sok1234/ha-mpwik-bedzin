@@ -136,7 +136,7 @@ class MpwikClient:
         readouts = self._extract_readouts(raw_readouts)
         latest = readouts[0] if readouts else {}
         consumption = (
-            round(readouts[0]["reading_m3"] - readouts["reading_m3"], 3)
+            round(readouts[0]["reading_m3"] - readouts[1]["reading_m3"], 3)
             if len(readouts) >= 2
             else latest.get("consumption_m3", 0.0)
         )
