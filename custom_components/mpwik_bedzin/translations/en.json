@@ -1,0 +1,33 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MPWiK Będzin iBOK",
+        "description": "Enter your iBOK credentials and polling interval.",
+        "data": {
+          "username": "Username / Client ID",
+          "password": "Password",
+          "scan_interval_hours": "Update interval (hours)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid username or password.",
+      "cannot_connect": "Cannot connect to MPWiK iBOK.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This account is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MPWiK Będzin Settings",
+        "data": {
+          "scan_interval_hours": "Update interval (hours)"
+        }
+      }
+    }
+  }
+}

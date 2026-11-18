@@ -1,0 +1,4 @@
+test_mpwik*.py
+__pycache__/
+*.py[cod]
+.DS_Store
